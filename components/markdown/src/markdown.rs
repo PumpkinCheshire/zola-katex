@@ -1,7 +1,10 @@
 use std::fmt::Write;
+use std::io::stdout;
+use std::io::Write as OtherWrite;
 
 use errors::bail;
 use libs::gh_emoji::Replacer as EmojiReplacer;
+use libs::katex::{render_with_opts, Opts};
 use libs::once_cell::sync::Lazy;
 use libs::pulldown_cmark as cmark;
 use libs::pulldown_cmark_escape as cmark_escape;
@@ -275,6 +278,7 @@ pub fn markdown_to_html(
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_HEADING_ATTRIBUTES);
+    opts.insert(Options::ENABLE_MATH);
 
     if context.config.markdown.smart_punctuation {
         opts.insert(Options::ENABLE_SMART_PUNCTUATION);
@@ -345,8 +349,11 @@ pub fn markdown_to_html(
             };
         }
 
+        let k_inline_opts = Opts::builder().display_mode(false).build().unwrap();
+        let k_display_opts = Opts::builder().display_mode(true).build().unwrap();
+
         let mut accumulated_block = String::new();
-        for (event, mut range) in Parser::new_ext(content, opts).into_offset_iter() {
+        for (event, mut range) in Parser::new_ext(&content, opts).into_offset_iter() {
             match event {
                 Event::Text(text) => {
                     if let Some(ref mut _code_block) = code_block {
@@ -538,6 +545,13 @@ pub fn markdown_to_html(
 
                     render_shortcodes!(false, text, range);
                 }
+                Event::InlineMath(text) => {
+                    events.push(Event::Html(render_with_opts(&text, &k_inline_opts).unwrap().into()))
+                }
+                Event::DisplayMath(text) =>{
+                    events.push(Event::Html(render_with_opts(&text, &k_display_opts).unwrap().into()))
+                }
+                
                 _ => events.push(event),
             }
         }
